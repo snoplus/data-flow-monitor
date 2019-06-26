@@ -20,7 +20,7 @@ The data-flow-monitor was designed as a way to scrape data from a Grafana dashbo
 
 ### NOTE
 
-Currently, Grafana is posting data one hour behind (ex. if it is 14:23, then it should post 14:00 as the latest but it posts 13:00) so there is a line in the data_processor.py to account for this. This is potentially by design from whoever set up our dashboard, so this may need to be modified depending on how yours is set up and will probably become an option in the config soon.
+Currently, our Grafana is posting data one hour behind (ex. if it is 14:23, then it should post 14:00 as the latest but it posts 13:00) so there is a line in the data_processor.py to account for this. This is potentially by design from whoever set up our dashboard, so this may need to be modified depending on how yours is set up and will probably become an option in the config soon.
 
 ### CREDITS
 
