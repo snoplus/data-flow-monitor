@@ -12,7 +12,7 @@ The data-flow-monitor was designed as a way to scrape data from the "Efficiency"
 ### INSTALLATION
 
 1. Download the release directory
-2. Modify run_script.sh so that it sets up your environment (making singularity visible), and ensure it changes into the correct install directory so that Cron can see the contents.
+2. Modify run_script.sh to ensure it changes into the correct install directory so that Cron can see the contents.
 3. Add execute permissions to run_script.sh (chmod +x run_script.sh)
 4. Modify grafana_config.json accordingly if credentials are necessary.
 5. Modify processor_config.json accordingly (NOT IMPLEMENTED YET; manual changes need to be made to both grafana-automation.js AND data_processor.py depending on your usage scenario).
