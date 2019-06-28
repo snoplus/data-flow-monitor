@@ -1,8 +1,4 @@
-#!/bin/bash
-
-# Ensure that your environment is set up so that singularity
-# is available (most likely by sourcing .bashrc but could be different based on site)
-# source $HOME/.bashrc
+#!/bin/bash -l
 
 # USE THIS FOR DEBUGGING/TESTING
 #singularity shell docker://buildkite/puppeteer
