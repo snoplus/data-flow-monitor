@@ -10,6 +10,11 @@ information
 CURRENT RUNTIME: ~40 SECONDS
 */
 
+
+// TODO
+// - Use 'async function...' to declare an async function for the try/catch blocks
+//   to reuse code
+
 'use strict';
 
 const puppeteer = require('puppeteer');
@@ -22,7 +27,6 @@ const config = require('./grafana_config.json');
     // These arguments are REQUIRED to run without root due to there being no sandbox available
     const browser = await puppeteer.launch({args: ['--no-sandbox', '--disable-setuid-sandbox']});
     const [page] = await browser.pages();
-
 
     // Start at the grafana login page
     let target_URL = 'https://monit-grafana.cern.ch/login'
@@ -97,7 +101,7 @@ const config = require('./grafana_config.json');
     // This was found by loading the grafana dashboard, then looking at the network tab in the devtools to see what
     // requests were made , then manually inspecting them until the one that contained the data was found (in this case the one with 'efficiency'
     // was how I identified it)
-    target_URL = 'https://monit-grafana.cern.ch/api/datasources/proxy/7794/query?db=monit_production_transfer&q=SELECT%20mean(%22efficiency%22)%20FROM%20%22one_month%22.%22transfer_fts_efficiency%22%20WHERE%20(%22vo%22%20%3D~%20%2F%5Esnoplus%5C.snolab%5C.ca%24%2F%20AND%20%22src_country%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22src_site%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22dst_country%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22dst_site%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22endpnt%22%20%3D~%20%2F%5E.*%24%2F)%20AND%20time%20%3E%3D%20now()%20-%2012h%20GROUP%20BY%20time(1h)%2C%20%22dst_hostname%22%20fill(none)&epoch=ms'
+    target_URL = 'https://monit-grafana.cern.ch/api/datasources/proxy/7794/query?db=monit_production_transfer&q=SELECT%20mean(%22efficiency%22)%20FROM%20%22one_month%22.%22transfer_fts_efficiency%22%20WHERE%20(%22vo%22%20%3D~%20%2F%5Esnoplus%5C.snolab%5C.ca%24%2F%20AND%20%22src_country%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22src_site%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22dst_country%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22dst_site%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22endpnt%22%20%3D~%20%2F%5E.*%24%2F)%20AND%20time%20%3E%3D%20now()%20-%2012h%20GROUP%20BY%20time(1h)%2C%20%22dst_hostname%22%20fill(none)&epoch=ms';
     try{
       await page.goto(target_URL);
     } catch(e) {
@@ -127,11 +131,44 @@ const config = require('./grafana_config.json');
       process.exit(1);
     }
 
-    const data_JSON = await page.$eval('pre', el => el.innerHTML);
+	const data_JSON = await page.$eval('pre', el => el.innerHTML);
+	
+	// If it is a wednesday (at 3am), then retrieve the weekly data for parsing as well
+	const date = await new Date();
+	if (date.getDay() === 3 && date.getHours() === 21){
+		let target_URL = 'https://monit-grafana.cern.ch/api/datasources/proxy/7794/query?db=monit_production_transfer&q=SELECT%20mean(%22efficiency%22)%20FROM%20%22one_month%22.%22transfer_fts_efficiency%22%20WHERE%20(%22vo%22%20%3D~%20%2F%5Esnoplus%5C.snolab%5C.ca%24%2F%20AND%20%22src_country%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22src_site%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22dst_country%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22dst_site%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22endpnt%22%20%3D~%20%2F%5E.*%24%2F)%20AND%20time%20%3E%3D%20now()%20-%207d%20GROUP%20BY%20time(1h)%2C%20%22dst_hostname%22%20fill(none)&epoch=ms';
+		
+		try {
+			await page.goto(target_URL);
+		} catch(e) {
+			var error = "error-Timeout while waiting for WEEKLY EFFICIENCY DATASOURCE to load";
+			console.log(error);
+			fs.writeFile("weekly-data.json", error, (err) => {
+				if (err) throw err;
+			});
+		}
+
+		await page.waitFor(4000);
+	
+		try {
+			await page.waitForSelector('pre');
+		} catch(e) {
+			var error = "error-Timeout while waiting for WEEKLY data elements to load in DATASOURCE";
+			console.log(error);
+			fs.writeFile("weekly-data.json", error, (err) => {
+				if (err) throw err;
+			});
+		}
+
+		const weekly_JSON = await page.$eval('pre', el => el.innerHTML);
+		fs.writeFile("weekly-data.json", weekly_JSON, (err) => {
+			if (err) throw err;
+		});
+	}
 
     // Now write to file
     fs.writeFile("data.json", data_JSON, (err) => {
-      if (err) throw err;
+      	if (err) throw err;
     });
 
     // Finally, clean up by closing the browser

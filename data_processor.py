@@ -7,6 +7,8 @@ import numpy
 from datetime import datetime
 from datetime import timedelta
 import time
+from os import path
+from os import remove
 
 # These are the thresholds to check for. If the
 # values have been consecutively below EFFICIENCY_THRESHOLD
@@ -30,6 +32,9 @@ hostnames = ["fndca4a.fnal.gov", "lcg-se1.sfu.computecanada.ca", "srm-snoplus.gr
 # At the end, if the report isn't empty, send it out
 issue_report = ""
 
+# Similar to the above, but for the weekly report
+weekly_report = ""
+
 # Opens a JSON data file and parses it down.
 # Returns a dict with the dst_hostname as key and the list of [time, value] pairs as the value
 def parse_data(data):
@@ -49,7 +54,8 @@ def parse_data(data):
             dst_hostname = dst_hostname.strip()
 
             # Remove each found hostname from the known list to narrow down the missing ones, if any
-            hostnames.remove(dst_hostname)
+            if dst_hostname in hostnames:
+                hostnames.remove(dst_hostname)
 
             data = data_dict["results"][0]["series"][i]["values"]
             final_dict[dst_hostname] = data
@@ -89,10 +95,36 @@ def calculate_stats(data_list, host):
         issue_report += under_mean
 
 
-# Check if the number of points is at least as many as HOUR_THRESHOLD (since we want more points for the mean than for checking efficiency);
-# if not, add it to the report
-# Returns a corrected data list with all gaps filled
-def check_number_of_points(data_list, host):
+# Compute the weekly average efficiency and downtime for the weekly report
+def calculate_stats_weekly(data_dict):
+    global weekly_report
+
+    # Pull each individual list and combine them
+    for key in data_dict:
+    
+        # Fill in any gaps that exist with 0's
+        fixed = fill_gaps(data_dict[key], "NONE")
+
+        # Get just the efficiencies
+        eff_list = map(lambda x: x[1], fixed)
+
+        # Now create a numpy array
+        eff_array = numpy.array(eff_list)
+
+        # Get the mean
+        mean = numpy.mean(eff_array) * 100
+
+        # We're done with the mean now, so get the downtime
+        downtime = (float(eff_list.count(0)) // len(eff_list)) * 100
+
+        weekly_report += "---{}---\n".format(key)
+        weekly_report += "Average efficiency over the last week: {}%\n\n".format(mean)
+        weekly_report += "Downtime over the last week: {} hours, or {}% of the time\n\n".format(eff_list.count(0),downtime)
+
+
+# Take the data_list, and fill in any gaps in time where there was no value
+# with a 0
+def fill_gaps(data_list, host):
     global issue_report
 
     # Create a new list and store the required values for gathering statistics in there.
@@ -137,6 +169,17 @@ def check_number_of_points(data_list, host):
 
         # Move to_insert to next hour
         to_insert -= timedelta(hours=1)
+    
+    return new_list
+
+
+# Check if the number of points is at least as many as HOUR_THRESHOLD (since we want more points for the mean than for checking efficiency);
+# if not, add it to the report
+# Returns a corrected data list with all gaps filled
+def check_number_of_points(data_list, host):
+    global issue_report
+
+    new_list = fill_gaps(data_list, host)
 
     # Now that we have added in missing data in between, check if we have at least HOUR_THRESHOLD points.
     # If not, then we need to add more zero's on the end (since we should have had that many points to start)
@@ -230,6 +273,23 @@ def send_report():
     subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
 
 
+def send_weekly_report():
+    global email_list
+    global weekly_report
+
+    timestamp = datetime.now().strftime("%x %X")
+    # Add in the header
+    weekly_report = "\n\n[\tAutomated Grafana Weekly Report - " + timestamp + "\t]\n\tReport any bugs/questions/suggestions to <jrajewsk@ualberta.ca>\n\n" + weekly_report
+    weekly_report += "[\t\t---END OF REPORT---\t\t]"
+    
+    # This print is to be stored in a log with cron, so if that is
+    # unnecessary then comment it out
+    print weekly_report
+
+    cmd = "echo -e '{}' | mailx -a weekly-data.json -s 'Automated Grafana Weekly Report' {}".format(weekly_report, email_list)
+    subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+
+    
 # Same as main but accepts a parameter for the data file to ease testing
 def tester(datafile):
     data_dict = parse_data(datafile)
@@ -256,6 +316,7 @@ def check_retrieval_errors(data_file):
 
 def main():
     global issue_report
+    global weekly_report
     # This is the name of the data file. Hard-coded as data.json since
     # that's what the grafana-scraper tool provides but can be changed for testing
     data_file = "data.json"
@@ -265,20 +326,37 @@ def main():
     issue = check_retrieval_errors(data_file)
     if issue != "":
         issue_report = issue + "\n\n"
-        send_report()
-        return
-
-    # Parse the data into a dictionary while performing
-    # preliminary checks
-    # data_dict -> Key: dst_hostname, Value: [time, value]
-    data_dict = parse_data(data_file)
     
-    process_data(data_dict)
+    else:
+        # Parse the data into a dictionary while performing
+        # preliminary checks
+        # data_dict -> Key: dst_hostname, Value: [time, value]
+        data_dict = parse_data(data_file)
+        process_data(data_dict)
 
     # If issue_report isn't empty, it means we have an issue to send so send it out
     if issue_report != "":
         send_report()
-    
+
+    # Now, check if there is any weekly data available (meaning it's time to send a report)
+    weekly_file = "weekly-data.json"
+    if path.exists(weekly_file):
+
+        # Check it for errors
+        issue = check_retrieval_errors(weekly_file)
+        if issue != "":
+            weekly_report = issue + "\n\n"
+
+        else:
+            data_dict = parse_data(weekly_file)
+            calculate_stats_weekly(data_dict)
+
+        # Send the report
+        send_weekly_report()
+
+        # Finally, delete the weekly report
+        remove(weekly_file)
+
 
 if __name__ == "__main__":
     main()
