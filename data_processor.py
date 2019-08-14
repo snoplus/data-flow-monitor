@@ -9,6 +9,7 @@ from datetime import timedelta
 import time
 from os import path
 from os import remove
+from time import sleep
 
 # These are the thresholds to check for. If the
 # values have been consecutively below EFFICIENCY_THRESHOLD
@@ -22,7 +23,7 @@ MEAN_THRESHOLD = 0.75
 MEAN_HOUR_THRESHOLD = 6
 
 # Send email alerts to these emails, separated by commas
-email_list = ""
+email_list = "jrajewsk@ualberta.ca"
 
 
 # These are the dst_hostnames. This list is used to figure out which are missing, if any, and correspond to the option "dst_hostnames" in the "Group By" filter
@@ -341,7 +342,6 @@ def main():
     # Now, check if there is any weekly data available (meaning it's time to send a report)
     weekly_file = "weekly-data.json"
     if path.exists(weekly_file):
-
         # Check it for errors
         issue = check_retrieval_errors(weekly_file)
         if issue != "":
@@ -354,6 +354,10 @@ def main():
         # Send the report
         send_weekly_report()
 
+        # Sleep for 3 seconds to prevent issues (for some reason, it would try to delete the file
+        # before sending the email, which really shouldn't happen...)
+        sleep(3)
+        
         # Finally, delete the weekly report
         remove(weekly_file)
 

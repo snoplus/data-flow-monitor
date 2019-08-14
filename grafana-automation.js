@@ -11,10 +11,6 @@ CURRENT RUNTIME: ~40 SECONDS
 */
 
 
-// TODO
-// - Use 'async function...' to declare an async function for the try/catch blocks
-//   to reuse code
-
 'use strict';
 
 const puppeteer = require('puppeteer');
@@ -133,9 +129,10 @@ const config = require('./grafana_config.json');
 
 	const data_JSON = await page.$eval('pre', el => el.innerHTML);
 	
-	// If it is a wednesday (at 3am), then retrieve the weekly data for parsing as well
-	const date = await new Date();
-	if (date.getDay() === 3 && date.getHours() === 21){
+	// If it is a tuesday (at 3am), then retrieve the weekly data for parsing as well
+        const date = await new Date();
+        // Tues is day === 2 and hours == 4
+        if ((date.getDay() === 2) && (date.getHours() === 4)){
 		let target_URL = 'https://monit-grafana.cern.ch/api/datasources/proxy/7794/query?db=monit_production_transfer&q=SELECT%20mean(%22efficiency%22)%20FROM%20%22one_month%22.%22transfer_fts_efficiency%22%20WHERE%20(%22vo%22%20%3D~%20%2F%5Esnoplus%5C.snolab%5C.ca%24%2F%20AND%20%22src_country%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22src_site%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22dst_country%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22dst_site%22%20%3D~%20%2F%5E.*%24%2F%20AND%20%22endpnt%22%20%3D~%20%2F%5E.*%24%2F)%20AND%20time%20%3E%3D%20now()%20-%207d%20GROUP%20BY%20time(1h)%2C%20%22dst_hostname%22%20fill(none)&epoch=ms';
 		
 		try {
@@ -160,7 +157,7 @@ const config = require('./grafana_config.json');
 			});
 		}
 
-		const weekly_JSON = await page.$eval('pre', el => el.innerHTML);
+	        const weekly_JSON = await page.$eval('pre', el => el.innerHTML);
 		fs.writeFile("weekly-data.json", weekly_JSON, (err) => {
 			if (err) throw err;
 		});
