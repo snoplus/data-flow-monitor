@@ -4,7 +4,7 @@
 #singularity shell docker://buildkite/puppeteer
 
 # Modify this to be the installation directory of the monitor
-cd ~/cron/monitoring/grafana-monitor/new/data-flow-monitor
+cd ~/cron/monitoring/data-flow-monitor
 
 # If the virtual environment isn't set up, do so first
 if [ ! -d python-virtualenv ]; then

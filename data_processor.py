@@ -23,7 +23,7 @@ MEAN_THRESHOLD = 0.75
 MEAN_HOUR_THRESHOLD = 6
 
 # Send email alerts to these emails, separated by commas
-email_list = "jrajewsk@ualberta.ca"
+email_list = "jrajewsk@ualberta.ca,snoplus_vosupport@snolab.ca"
 
 
 # These are the dst_hostnames. This list is used to figure out which are missing, if any, and correspond to the option "dst_hostnames" in the "Group By" filter
