@@ -23,7 +23,7 @@ MEAN_THRESHOLD = 0.75
 MEAN_HOUR_THRESHOLD = 6
 
 # Send email alerts to these emails, separated by commas
-email_list = "jrajewsk@ualberta.ca,snoplus_vosupport@snolab.ca"
+email_list = "jrajewsk@ualberta.ca" #,snoplus_vosupport@snolab.ca"
 
 
 # These are the dst_hostnames. This list is used to figure out which are missing, if any, and correspond to the option "dst_hostnames" in the "Group By" filter
@@ -53,6 +53,10 @@ def parse_data(data):
         for i in range(number_of_hosts):
             dst_hostname = data_dict["results"][0]["series"][i]["tags"]["dst_hostname"]
             dst_hostname = dst_hostname.strip()
+
+            # --TEMPORARY FIX TO STOP REPORTING FOR SNOPSE DURING MIGRATION-- #
+            if "snopse" in dst_hostname:
+                continue
 
             # Remove each found hostname from the known list to narrow down the missing ones, if any
             if dst_hostname in hostnames:
@@ -116,7 +120,7 @@ def calculate_stats_weekly(data_dict):
         mean = numpy.mean(eff_array) * 100
 
         # We're done with the mean now, so get the downtime
-        downtime = (float(eff_list.count(0)) // len(eff_list)) * 100
+        downtime = (float(eff_list.count(0)) / float(len(eff_list))) * 100
 
         weekly_report += "---{}---\n".format(key)
         weekly_report += "Average efficiency over the last week: {}%\n\n".format(mean)
