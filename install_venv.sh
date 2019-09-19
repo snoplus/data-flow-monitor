@@ -1,3 +1,3 @@
 #!/bin/bash
 
-virtualenv python-virtualenv && source python-virtualenv/bin/activate && pip install -r requirements.txt
+virtualenv --no-site-packages python-virtualenv && source python-virtualenv/bin/activate && python-virtualenv/bin/pip install -r requirements.txt
