@@ -6,7 +6,6 @@ import subprocess
 import numpy
 from datetime import datetime
 from datetime import timedelta
-import time
 from os import path
 from os import remove
 from time import sleep
@@ -23,11 +22,10 @@ MEAN_THRESHOLD = 0.75
 MEAN_HOUR_THRESHOLD = 6
 
 # Send email alerts to these emails, separated by commas
-email_list = "jrajewsk@ualberta.ca" #,snoplus_vosupport@snolab.ca"
-
+email_list = "jrajewsk@ualberta.ca, snoplus_vosupport@snolab.ca"
 
 # These are the dst_hostnames. This list is used to figure out which are missing, if any, and correspond to the option "dst_hostnames" in the "Group By" filter
-hostnames = ["fndca4a.fnal.gov", "lcg-se1.sfu.computecanada.ca", "srm-snoplus.gridpp.rl.ac.uk"]
+hostnames = ["fndca4a.fnal.gov", "lcg-snopse1.sfu.computecanada.ca", "srm-snoplus.gridpp.rl.ac.uk"]
 
 # Create a global report string that can be appended to throughout processing as any issues are found;
 # At the end, if the report isn't empty, send it out
@@ -53,10 +51,6 @@ def parse_data(data):
         for i in range(number_of_hosts):
             dst_hostname = data_dict["results"][0]["series"][i]["tags"]["dst_hostname"]
             dst_hostname = dst_hostname.strip()
-
-            # --TEMPORARY FIX TO STOP REPORTING FOR SNOPSE DURING MIGRATION-- #
-            if "snopse" in dst_hostname:
-                continue
 
             # Remove each found hostname from the known list to narrow down the missing ones, if any
             if dst_hostname in hostnames:
@@ -112,16 +106,16 @@ def calculate_stats_weekly(data_dict):
 
         # Get just the efficiencies
         eff_list = map(lambda x: x[1], fixed)
-
+        
         # Now create a numpy array
         eff_array = numpy.array(eff_list)
-
+        
         # Get the mean
         mean = numpy.mean(eff_array) * 100
 
         # We're done with the mean now, so get the downtime
         downtime = (float(eff_list.count(0)) / float(len(eff_list))) * 100
-
+        
         weekly_report += "---{}---\n".format(key)
         weekly_report += "Average efficiency over the last week: {}%\n\n".format(mean)
         weekly_report += "Downtime over the last week: {} hours, or {}% of the time\n\n".format(eff_list.count(0),downtime)
@@ -264,7 +258,7 @@ def process_data(data_dict):
 def send_report():
     global issue_report
     global email_list
-
+    
     timestamp = datetime.now().strftime("%x %X")
     # Add in the header
     issue_report = "\n\n[\tAutomated Grafana Issue Report - " + timestamp + "\t]\n\tProblematic data attached to this email;\n\tReport any bugs/questions/suggestions to <jrajewsk@ualberta.ca>\n\n" + issue_report
@@ -274,10 +268,13 @@ def send_report():
     # unnecessary then comment it out
     print issue_report
 
-    cmd = "echo -e '{}' | mailx -a data.json -s 'Automated Grafana Issue Report' {}".format(issue_report, email_list)
+    if path.exists("data.json"):
+        cmd = "echo -e '{}' | mailx -a data.json -s 'Automated Grafana Issue Report' {}".format(issue_report, email_list)
+    else:
+        cmd = "echo -e '{}' | mailx -s 'Automated Grafana Issue Report' {}".format(issue_report, email_list)
     subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
 
-
+    
 def send_weekly_report():
     global email_list
     global weekly_report
@@ -310,12 +307,16 @@ def tester(datafile):
 # failed
 def check_retrieval_errors(data_file):
     issue = ""
-    with open(data_file) as f:
-        data = f.read()
-        split = data.split("-")
 
-        if split[0] == "error":
-            issue = split[1]
+    if path.exists(data_file):
+        with open(data_file) as f:
+            data = f.read()
+            split = data.split("-")
+
+            if split[0] == "error":
+                issue = split[1]
+    else:
+        issue = "---COULD NOT RETRIEVE DATA FROM GRAFANA---\nThis could be for a variety of reasons; check Grafana, and the logs"
     return issue
     
 
@@ -324,7 +325,7 @@ def main():
     global weekly_report
     # This is the name of the data file. Hard-coded as data.json since
     # that's what the grafana-scraper tool provides but can be changed for testing
-    data_file = "data.json"
+    data_file = "data.json"        
 
     # First, check to ensure we haven't received any errors in the data retrieval step.
     # If we did, then add it to the issue report and send, then terminate
@@ -342,6 +343,11 @@ def main():
     # If issue_report isn't empty, it means we have an issue to send so send it out
     if issue_report != "":
         send_report()
+
+        # Delete the file (if it exists)
+        if path.exists(data_file):
+            sleep(3)
+            remove(data_file)
 
     # Now, check if there is any weekly data available (meaning it's time to send a report)
     weekly_file = "weekly-data.json"
