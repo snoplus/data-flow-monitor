@@ -3,6 +3,9 @@
 # USE THIS FOR DEBUGGING/TESTING
 #singularity shell docker://buildkite/puppeteer
 
+# Make the script safe
+#set -eox pipefail
+
 # Modify this to be the installation directory of the monitor
 cd ~/cron/monitoring/data-flow-monitor
 
@@ -15,10 +18,10 @@ fi
 source python-virtualenv/bin/activate
 
 # Ensure we are using the correct version of singularity
-module load singularity/2.6
+module load singularity/3.2
 
 # Execute the scraper using puppeteer in a container
-singularity exec docker://buildkite/puppeteer node grafana-automation.js
+singularity exec puppeteer.img node grafana-automation.js
 
 # Following execution, data.json will be produced. Now process it
 python2 data_processor.py
