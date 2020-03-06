@@ -6,6 +6,7 @@ import subprocess
 import numpy
 import requests
 import sys
+import argparse
 from datetime import datetime
 from datetime import timedelta
 from os import system
@@ -41,7 +42,7 @@ weekly_report = ""
 # Fetch the efficiency data from Grafana
 # The Grafana API token should be stored in the same directory as this file,
 # in a file called token.txt
-def fetch_data(timeframe):
+def fetch_data(timeframe, token_path):
     global issue_report
 
     period = ""
@@ -53,8 +54,7 @@ def fetch_data(timeframe):
         print "Incorrect time period specified, exiting..."
         sys.exit(1)
     
-    token = ""
-    with open("token.txt", "r") as the_file:
+    with open(token_path, "r") as the_file:
         token = (the_file.readline()).strip('\n')
         
     auth = "Bearer {}".format(token)
@@ -332,12 +332,13 @@ def send_weekly_report(data):
     system(cmd)
 
     
-def main():
+def main(token_path):
     global issue_report
     global weekly_report
+
     
     # First, fetch the data from Grafana
-    data_file = fetch_data("day")
+    data_file = fetch_data("day", token_path)
     
     # First, check to ensure we haven't received any errors in the data retrieval step.
     # If we did, send the report
@@ -359,7 +360,7 @@ def main():
     if datetime.today().weekday() == 1 and datetime.now().hour >= 3 and datetime.now().hour <= 4:
 
         # Send a request for weekly data
-        weekly_file = fetch_data("week")
+        weekly_file = fetch_data("week", token_path)
         
         data_dict = parse_data(weekly_file)
         calculate_stats_weekly(data_dict)
@@ -369,4 +370,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser("data-flow-monitor: Monitors SNO+ Grafana for efficiency")
+    parser.add_argument("token_path", help="The path to the Grafana API token")
+    args = parser.parse_args()
+    
+    main(args.token_path)

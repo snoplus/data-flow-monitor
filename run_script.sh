@@ -12,7 +12,7 @@ fi
 source python-venv/bin/activate
 
 # Run the script with the virtual env
-python2 data_processor.py
+python2 data_processor.py token.txt
 
 # Deactivate
 deactivate
