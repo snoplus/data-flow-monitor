@@ -1,4 +1,5 @@
-grafana_config.json
 data.json
 monitor.log
 python-virtualenv/
+weekly-data.json
+token.txt

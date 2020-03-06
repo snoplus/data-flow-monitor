@@ -4,11 +4,15 @@
 import json
 import subprocess
 import numpy
+import requests
+import sys
 from datetime import datetime
 from datetime import timedelta
+from os import system
 from os import path
 from os import remove
 from time import sleep
+
 
 # These are the thresholds to check for. If the
 # values have been consecutively below EFFICIENCY_THRESHOLD
@@ -22,7 +26,7 @@ MEAN_THRESHOLD = 0.75
 MEAN_HOUR_THRESHOLD = 6
 
 # Send email alerts to these emails, separated by commas
-email_list = "jrajewsk@ualberta.ca, snoplus_vosupport@snolab.ca"
+email_list = "jrajewsk@ualberta.ca,snoplus_vosupport@snolab.ca"
 
 # These are the dst_hostnames. This list is used to figure out which are missing, if any, and correspond to the option "dst_hostnames" in the "Group By" filter
 hostnames = ["fndca4a.fnal.gov", "lcg-snopse1.sfu.computecanada.ca", "srm-snoplus.gridpp.rl.ac.uk"]
@@ -34,38 +38,70 @@ issue_report = ""
 # Similar to the above, but for the weekly report
 weekly_report = ""
 
+# Fetch the efficiency data from Grafana
+# The Grafana API token should be stored in the same directory as this file,
+# in a file called token.txt
+def fetch_data(timeframe):
+    global issue_report
+
+    period = ""
+    if timeframe == "week":
+        period = "7d"
+    elif timeframe == "day":
+        period = "12h"
+    else:
+        print "Incorrect time period specified, exiting..."
+        sys.exit(1)
+    
+    token = ""
+    with open("token.txt", "r") as the_file:
+        token = (the_file.readline()).strip('\n')
+        
+    auth = "Bearer {}".format(token)
+    headers = {'Authorization': auth}
+    query = '''SELECT mean("efficiency") FROM "one_month"."transfer_fts_efficiency" WHERE ("vo" =~ /^snoplus\.snolab\.ca$/ AND "src_country" =~ /^.*$/ AND "src_site" =~ /^.*$/ AND "dst_country" =~ /^.*$/ AND "dst_site" =~ /^.*$/ AND "endpnt" =~ /^.*$/) AND time >= now() - {} GROUP BY time(1h), "dst_hostname" fill(none)'''.format(period)
+    datasourceid = "7794"
+    url = "https://monit-grafana.cern.ch/api/datasources/proxy/{}/query?db=monit_production_transfer&q={}".format(datasourceid,query)
+
+    r = requests.get(url, headers=headers)
+
+    if r.status_code == 200:
+        return r.text
+
+    else:
+        failed_request = "---FAILED REQUEST---\nThe request to retrieve the efficiency data from Grafana failed with HTTP status {}\n\n".format(r.status_code)
+        issue_report += failed_request
+
+        
 # Opens a JSON data file and parses it down.
 # Returns a dict with the dst_hostname as key and the list of [time, value] pairs as the value
 def parse_data(data):
     global issue_report
     final_dict = {}
-    f = open(data, "r")
 
-    if f.mode == "r":
-        data_json = f.read()
-        data_dict = json.loads(data_json)
+    data_dict = json.loads(data)
 
-        # Iterate through the 3 dst_hostnames
-        number_of_hosts = len(data_dict["results"][0]["series"])
+    # Iterate through the 3 dst_hostnames
+    number_of_hosts = len(data_dict["results"][0]["series"])
 
-        for i in range(number_of_hosts):
-            dst_hostname = data_dict["results"][0]["series"][i]["tags"]["dst_hostname"]
-            dst_hostname = dst_hostname.strip()
+    for i in range(number_of_hosts):
+        dst_hostname = data_dict["results"][0]["series"][i]["tags"]["dst_hostname"]
+        dst_hostname = dst_hostname.strip()
 
-            # Remove each found hostname from the known list to narrow down the missing ones, if any
-            if dst_hostname in hostnames:
-                hostnames.remove(dst_hostname)
+        # Remove each found hostname from the known list to narrow down the missing ones, if any
+        if dst_hostname in hostnames:
+            hostnames.remove(dst_hostname)
 
-            data = data_dict["results"][0]["series"][i]["values"]
-            final_dict[dst_hostname] = data
+        data = data_dict["results"][0]["series"][i]["values"]
+        final_dict[dst_hostname] = data
 
-        # Add any remaining hosts to the report as missing hostnames (meaning they are completely missing)
-        # If it is empty, this loop will simply be skipped
-        for host in hostnames:
-            missing = "---MISSING dst_hostname---\n{} is missing altogether from the last 12 hours of data\n\n".format(host)
-            issue_report += missing
+    # Add any remaining hosts to the report as missing hostnames (meaning they are completely missing)
+    # If it is empty, this loop will simply be skipped
+    for host in hostnames:
+        missing = "---MISSING dst_hostname---\n{} is missing altogether from the last 12 hours of data\n\n".format(host)
+        issue_report += missing
 
-        return final_dict
+    return final_dict
 
 
 # Take the [[time, eff], [time, eff]...] list and calculate
@@ -100,7 +136,7 @@ def calculate_stats_weekly(data_dict):
 
     # Pull each individual list and combine them
     for key in data_dict:
-    
+        
         # Fill in any gaps that exist with 0's
         fixed = fill_gaps(data_dict[key], "NONE")
 
@@ -142,8 +178,7 @@ def fill_gaps(data_list, host):
     for i, e in reversed(list(enumerate(data_list))):
 
         count += 1
-        current = datetime.fromtimestamp(e[0]/1000)
-
+        current = datetime.strptime(e[0], "%Y-%m-%dT%H:%M:%SZ")
         change = to_insert - current
         change = int(change.total_seconds() // 3600)
         
@@ -157,7 +192,7 @@ def fill_gaps(data_list, host):
         # If the difference between times is an hour or more
         for hour in range(change):
 
-            unix_time = int(to_insert.strftime("%s")) * 1000
+            unix_time = to_insert.strftime("%Y-%m-%dT%H:%M:%SZ")
             new_list.insert(0, [unix_time, 0])
 
             to_insert -= timedelta(hours=1)
@@ -255,7 +290,7 @@ def process_data(data_dict):
         check_consecutive_efficiency(fixed_list, key)
 
 
-def send_report():
+def send_report(data):
     global issue_report
     global email_list
     
@@ -268,14 +303,16 @@ def send_report():
     # unnecessary then comment it out
     print issue_report
 
+    # Write the data to a file and attach it to the email
+    with open("data.json", "w") as the_file:
+        the_file.write(data)
+        
     if path.exists("data.json"):
-        cmd = "echo -e '{}' | mailx -a data.json -s 'Automated Grafana Issue Report' {}".format(issue_report, email_list)
-    else:
-        cmd = "echo -e '{}' | mailx -s 'Automated Grafana Issue Report' {}".format(issue_report, email_list)
-    subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+        cmd = """echo "{b}" | mailx -a "{f}" -s "{s}" "{to}" 2>/dev/null""".format(b=issue_report, f="data.json", s="Automated Grafana Issue Report", to=email_list)
+        system(cmd)
+        
 
-    
-def send_weekly_report():
+def send_weekly_report(data):
     global email_list
     global weekly_report
 
@@ -288,88 +325,47 @@ def send_weekly_report():
     # unnecessary then comment it out
     print weekly_report
 
-    cmd = "echo -e '{}' | mailx -a weekly-data.json -s 'Automated Grafana Weekly Report' {}".format(weekly_report, email_list)
-    subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+    with open("weekly-data.json", "w") as the_file:
+        the_file.write(data)
+
+    cmd = """echo "{b}" | mailx -a "{f}" -s "{s}" "{to}" 2>/dev/null""".format(b=weekly_report, f="weekly-data.json", s="Automated Grafana Weekly Report", to=email_list)
+    system(cmd)
 
     
-# Same as main but accepts a parameter for the data file to ease testing
-def tester(datafile):
-    data_dict = parse_data(datafile)
-
-    process_data(data_dict)
-
-    if issue_report != "":
-        send_report()
-
-
-# Open the data file and check to see if there were any errors encountered during the
-# retrieval stage. If so, add an issue to the report and end here since data retrieval
-# failed
-def check_retrieval_errors(data_file):
-    issue = ""
-
-    if path.exists(data_file):
-        with open(data_file) as f:
-            data = f.read()
-            split = data.split("-")
-
-            if split[0] == "error":
-                issue = split[1]
-    else:
-        issue = "---COULD NOT RETRIEVE DATA FROM GRAFANA---\nThis could be for a variety of reasons; check Grafana, and the logs"
-    return issue
-    
-
 def main():
     global issue_report
     global weekly_report
-    # This is the name of the data file. Hard-coded as data.json since
-    # that's what the grafana-scraper tool provides but can be changed for testing
-    data_file = "data.json"        
-
-    # First, check to ensure we haven't received any errors in the data retrieval step.
-    # If we did, then add it to the issue report and send, then terminate
-    issue = check_retrieval_errors(data_file)
-    if issue != "":
-        issue_report = issue + "\n\n"
     
-    else:
-        # Parse the data into a dictionary while performing
-        # preliminary checks
-        # data_dict -> Key: dst_hostname, Value: [time, value]
-        data_dict = parse_data(data_file)
-        process_data(data_dict)
-
-    # If issue_report isn't empty, it means we have an issue to send so send it out
+    # First, fetch the data from Grafana
+    data_file = fetch_data("day")
+    
+    # First, check to ensure we haven't received any errors in the data retrieval step.
+    # If we did, send the report
     if issue_report != "":
-        send_report()
+        send_report(data_file)
+        sys.exit(1)
+    
+    # Parse the data into a dictionary while performing
+    # preliminary checks
+    # data_dict -> Key: dst_hostname, Value: [time, value]
+    data_dict = parse_data(data_file)        
+    process_data(data_dict)
 
-        # Delete the file (if it exists)
-        if path.exists(data_file):
-            sleep(3)
-            remove(data_file)
-
+    # Do one final check if the issue report has anything to send
+    if issue_report != "":
+        send_report(data_file)
+    
     # Now, check if there is any weekly data available (meaning it's time to send a report)
-    weekly_file = "weekly-data.json"
-    if path.exists(weekly_file):
-        # Check it for errors
-        issue = check_retrieval_errors(weekly_file)
-        if issue != "":
-            weekly_report = issue + "\n\n"
+    if datetime.today().weekday() == 1 and datetime.now().hour >= 3 and datetime.now().hour <= 4:
 
-        else:
-            data_dict = parse_data(weekly_file)
-            calculate_stats_weekly(data_dict)
+        # Send a request for weekly data
+        weekly_file = fetch_data("week")
+        
+        data_dict = parse_data(weekly_file)
+        calculate_stats_weekly(data_dict)
 
         # Send the report
-        send_weekly_report()
-
-        # Sleep for 3 seconds to prevent issues (for some reason, it would try to delete the file
-        # before sending the email, which really shouldn't happen...)
-        sleep(3)
-        
-        # Finally, delete the weekly report
-        remove(weekly_file)
+        send_weekly_report(weekly_file)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,3 @@
 #!/bin/bash
 
-virtualenv --no-site-packages python-virtualenv && source python-virtualenv/bin/activate && python-virtualenv/bin/pip install -r requirements.txt
+virtualenv --no-site-packages python-venv && source python-venv/bin/activate && python -m pip install requests numpy && deactivate
