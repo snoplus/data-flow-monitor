@@ -30,7 +30,7 @@ MEAN_HOUR_THRESHOLD = 6
 email_list = "snoplus_vosupport@snolab.ca"
 
 # These are the dst_hostnames. This list is used to figure out which are missing, if any, and correspond to the option "dst_hostnames" in the "Group By" filter
-hostnames = ["fndca4a.fnal.gov", "lcg-snopse1.sfu.computecanada.ca", "srm-snoplus.gridpp.rl.ac.uk"]
+hostnames = ["fndca1.fnal.gov", "lcg-snopse1.sfu.computecanada.ca", "srm-snoplus.gridpp.rl.ac.uk"]
 
 # Create a global report string that can be appended to throughout processing as any issues are found;
 # At the end, if the report isn't empty, send it out
