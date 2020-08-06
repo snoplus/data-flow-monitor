@@ -2,21 +2,29 @@
 
 ### OVERVIEW
 
-The data-flow-monitor was designed as a way to scrape data from the "Efficiency" view on a Grafana dashboard where the user does NOT have access to the API (when you only have a viewer account). The strategy implemented here can be utilized elsewhere as it uses general webscraping methodologies.
+The data-flow monitor is designed to check the SNO+ Grafana page for any issues in transfer efficiency, and report them both
+daily and weekly to the processing group.
+
+As of v2.0, the tool no longer relies on scraping as I was able to finally acquire an API key. This allows the tool to run
+significantly faster and more reliably as it can simply make a call to the data source and retrieve the result rather than
+running through all of the webpages.
 
 ### REQUIREMENTS
 
 * virtualenv (in order to install the isolated python environment)
-* Singularity (3.1+ recommended, otherwise there may be issues with passing environment variables into the container)
 
 ### INSTALLATION
 
 1. Download the release directory
 2. Modify run_script.sh to ensure it changes into the correct install directory so that Cron can see the contents.
 3. Add execute permissions to run_script.sh (chmod +x run_script.sh)
-4. Modify grafana_config.json accordingly if credentials are necessary.
-5. Modify processor_config.json accordingly (NOT IMPLEMENTED YET; manual changes need to be made to both grafana-automation.js AND data_processor.py depending on your usage scenario).
-6. (OPTIONAL) Schedule as a Cron job.
+4. Ensure you have the grafana API token stored somewhere and modify run_script.sh to pass in the path to it when running 
+   data_processor.py
+5. (OPTIONAL) Schedule as a Cron job so that it runs on a schedule.
+
+### TO RUN
+
+`./run_script`
 
 ### NOTE
 
