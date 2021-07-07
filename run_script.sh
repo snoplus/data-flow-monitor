@@ -1,18 +1,19 @@
-#!/bin/bash -l
+#!/bin/bash
 
-# Modify this to be the installation directory of the monitor
-cd ~/cron/monitoring/data-flow-monitor
+set -e
 
 # Install venv if not already setup
-if [ ! -d ~/monitoring/data-flow-monitor/python-venv ]; then
+if [ ! -d python-venv ]; then
+    echo "data-flow-monitor virtual env does not exist; now creating..."
     ./install_venv.sh
+    echo "data-flow-monitor virtual env created"
 fi
 
 # Activate venv
 source python-venv/bin/activate
 
 # Run the script with the virtual env
-python2 data_processor.py token.txt
+python data_processor.py token.txt
 
 # Deactivate
 deactivate
