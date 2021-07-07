@@ -2,6 +2,13 @@
 
 set -e
 
+if [ ! -d $HOME/data-flow-monitor ]; then
+    echo "data-flow-monitor not installed to home directory; please move it to $HOME and try again"
+    exit 1
+fi
+
+cd $HOME/data-flow-monitor
+
 # Install venv if not already setup
 if [ ! -d python-venv ]; then
     echo "data-flow-monitor virtual env does not exist; now creating..."
