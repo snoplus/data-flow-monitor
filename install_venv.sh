@@ -4,5 +4,5 @@ set -e
 
 virtualenv python-venv
 source python-venv/bin/activate
-python -m pip install requests numpy
+python -m pip install --ignore-installed requests numpy
 deactivate
